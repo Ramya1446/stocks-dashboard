@@ -92,9 +92,9 @@ if not filtered:
     st.stop()
 
 for name, data in filtered.items():
-    price = data.get("price", 0)
-    chg = data.get("change_pct", 0)
-    change = data.get("change", 0)
+    price = data.get("price") or 0
+    chg = data.get("change_pct") or 0
+    change = data.get("change") or 0
     ticker = data.get("ticker", "").replace(".NS", "")
     mcap = data.get("market_cap")
     pe = data.get("pe_ratio")
@@ -146,11 +146,11 @@ for name, data in filtered.items():
             </div>
             <div>
               <div class="data-label" style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.7px;">52W High</div>
-              <div style="font-size:14px;font-weight:600;color:#f0f6fc;margin-top:3px;">₹{w52h:.2f if w52h else 'N/A'}</div>
+              <div style="font-size:14px;font-weight:600;color:#f0f6fc;margin-top:3px;">{'₹' + f'{w52h:.2f}' if w52h else 'N/A'}</div>
             </div>
             <div>
               <div class="data-label" style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.7px;">52W Low</div>
-              <div style="font-size:14px;font-weight:600;color:#f0f6fc;margin-top:3px;">₹{w52l:.2f if w52l else 'N/A'}</div>
+              <div style="font-size:14px;font-weight:600;color:#f0f6fc;margin-top:3px;">{'₹' + f'{w52l:.2f}' if w52l else 'N/A'}</div>
             </div>
             <div>
               <div class="data-label" style="font-size:11px;color:#8b949e;text-transform:uppercase;letter-spacing:0.7px;">Beta</div>
