@@ -5,7 +5,7 @@ with per-article AI summaries from Groq
 
 import streamlit as st
 from utils.stock_data import WATCHLIST
-from utils.news_fetcher import fetch_all_news, fetch_market_news
+from utils.news_fetcher import fetch_all_news, fetch_market_news, fetch_finnhub_market_news
 from utils.ai_analyzer import summarize_article
 
 st.set_page_config(page_title="News Feed — StockSense", page_icon="📰", layout="wide")
@@ -75,8 +75,12 @@ with st.sidebar:
     st.page_link("pages/3_News_Feed.py", label="📰 News Feed")
     st.page_link("pages/4_Why_Did_It_Move.py", label="❓ Why Did It Move?")
 
+from datetime import datetime, timedelta, timezone as _tz
+
 st.markdown('<div class="page-title">📰 News Feed</div>', unsafe_allow_html=True)
-st.markdown('<div class="page-sub">Real-time news from Finnhub · Alpha Vantage · Marketaux — with Groq AI summaries.</div>', unsafe_allow_html=True)
+_week_ago_label = (datetime.now(_tz.utc) - timedelta(days=7)).strftime("%d %b")
+_today_label = datetime.now(_tz.utc).strftime("%d %b %Y")
+st.markdown(f'<div class="page-sub">📅 This week only · {_week_ago_label} → {_today_label} · Finnhub + Marketaux · Groq AI summaries on demand.</div>', unsafe_allow_html=True)
 
 # ── Tabs ───────────────────────────────────────────────────────────────────────
 tab1, tab2 = st.tabs(["📌 Company News", "🌐 Market News"])
@@ -149,7 +153,7 @@ with tab1:
             title = article.get("title", "No title")
             body = article.get("summary", "")
             source = article.get("source", "Unknown")
-            published = article.get("published_at", "")
+            published = article.get("display_date") or article.get("published_at", "")[:16]
             url = article.get("url", "#")
             sentiment = article.get("sentiment", "")
 
@@ -222,13 +226,23 @@ with tab2:
             del st.session_state["market_news_cache"]
 
     if "market_news_cache" not in st.session_state:
-        with st.spinner("Fetching broad market news..."):
-            market_news = fetch_market_news()
-        st.session_state["market_news_cache"] = market_news
+        with st.spinner("Fetching this week's market news..."):
+            m1 = fetch_market_news()
+            m2 = fetch_finnhub_market_news()
+            combined = m1 + m2
+            seen_mkt = set()
+            deduped = []
+            for a in combined:
+                key = a.get("title", "")[:50].lower().strip()
+                if key and key not in seen_mkt:
+                    seen_mkt.add(key)
+                    deduped.append(a)
+            deduped.sort(key=lambda x: x.get("published_at", ""), reverse=True)
+        st.session_state["market_news_cache"] = deduped
 
     market_news = st.session_state.get("market_news_cache", [])
 
-    st.markdown(f'<div class="section-header">🌐 {len(market_news)} Market Headlines</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="section-header">🌐 {len(market_news)} Market Headlines This Week</div>', unsafe_allow_html=True)
 
     if not market_news:
         st.info("No market news fetched. Check your Marketaux API key.")
@@ -237,7 +251,7 @@ with tab2:
             title = article.get("title", "No title")
             body = article.get("summary", "")
             source = article.get("source", "Unknown")
-            published = article.get("published_at", "")
+            published = article.get("display_date") or article.get("published_at", "")[:16]
             url = article.get("url", "#")
 
             st.markdown(f"""
