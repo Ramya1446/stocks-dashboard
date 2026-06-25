@@ -5,7 +5,7 @@ with per-article AI summaries from Groq
 
 import streamlit as st
 from utils.stock_data import WATCHLIST
-from utils.news_fetcher import fetch_all_news, fetch_market_news, fetch_finnhub_market_news
+from utils.news_fetcher import fetch_all_news, fetch_market_news
 from utils.ai_analyzer import summarize_article
 
 st.set_page_config(page_title="News Feed — StockSense", page_icon="📰", layout="wide")
@@ -227,17 +227,7 @@ with tab2:
 
     if "market_news_cache" not in st.session_state:
         with st.spinner("Fetching this week's market news..."):
-            m1 = fetch_market_news()
-            m2 = fetch_finnhub_market_news()
-            combined = m1 + m2
-            seen_mkt = set()
-            deduped = []
-            for a in combined:
-                key = a.get("title", "")[:50].lower().strip()
-                if key and key not in seen_mkt:
-                    seen_mkt.add(key)
-                    deduped.append(a)
-            deduped.sort(key=lambda x: x.get("published_at", ""), reverse=True)
+            deduped = fetch_market_news()
         st.session_state["market_news_cache"] = deduped
 
     market_news = st.session_state.get("market_news_cache", [])

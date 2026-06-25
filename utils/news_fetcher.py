@@ -268,89 +268,79 @@ def fetch_marketaux_news(company_name: str) -> list[dict]:
 
 # ── Market-wide news ───────────────────────────────────────────────────────────
 def fetch_market_news() -> list[dict]:
-    """Fetch this week's broad Indian market news from Marketaux."""
+    """Fetch this week's broad Indian market news from Marketaux + Finnhub, merged."""
+    results = []
+
+    # — Marketaux —
     api_key = st.secrets.get("MARKETAUX_API_KEY", "")
-    if not api_key:
-        return []
+    if api_key:
+        week_ago = _week_ago_str()
+        url = "https://api.marketaux.com/v1/news/all"
+        params = {
+            "api_token": api_key,
+            "search": "Nifty OR Sensex OR RBI OR BSE OR Indian stock market",
+            "language": "en",
+            "limit": 15,
+            "sort": "published_desc",
+            "published_after": week_ago,
+        }
+        try:
+            resp = requests.get(url, params=params, timeout=10)
+            if resp.status_code == 200:
+                for a in resp.json().get("data", []):
+                    pub_raw = a.get("published_at", "")
+                    if not _is_this_week(pub_raw):
+                        continue
+                    results.append({
+                        "title": a.get("title", ""),
+                        "summary": a.get("description", "") or a.get("snippet", ""),
+                        "url": a.get("url", ""),
+                        "published_at": pub_raw,
+                        "display_date": _format_display_date(pub_raw),
+                        "source": "Marketaux",
+                        "sentiment": None,
+                    })
+        except Exception:
+            pass
 
-    week_ago = _week_ago_str()
+    # — Finnhub —
+    fh_key = st.secrets.get("FINNHUB_API_KEY", "")
+    if fh_key:
+        cutoff_ts = _week_ago().timestamp()
+        try:
+            resp = requests.get(
+                "https://finnhub.io/api/v1/news",
+                params={"token": fh_key, "category": "general"},
+                timeout=8,
+            )
+            if resp.status_code == 200 and isinstance(resp.json(), list):
+                for a in resp.json():
+                    ts = a.get("datetime", 0)
+                    if ts < cutoff_ts:
+                        continue
+                    pub_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    results.append({
+                        "title": a.get("headline", ""),
+                        "summary": a.get("summary", ""),
+                        "url": a.get("url", ""),
+                        "published_at": pub_str,
+                        "display_date": _format_display_date(pub_str),
+                        "source": "Finnhub",
+                        "sentiment": None,
+                    })
+        except Exception:
+            pass
 
-    url = "https://api.marketaux.com/v1/news/all"
-    params = {
-        "api_token": api_key,
-        "search": "Nifty OR Sensex OR RBI OR BSE OR Indian stock market",
-        "language": "en",
-        "limit": 15,
-        "sort": "published_desc",
-        "published_after": week_ago,  # ← date filter
-    }
-
-    try:
-        resp = requests.get(url, params=params, timeout=10)
-        if resp.status_code != 200:
-            return []
-        articles = resp.json().get("data", [])
-
-        results = []
-        for a in articles:
-            pub_raw = a.get("published_at", "")
-            if not _is_this_week(pub_raw):
-                continue
-            results.append({
-                "title": a.get("title", ""),
-                "summary": a.get("description", "") or a.get("snippet", ""),
-                "url": a.get("url", ""),
-                "published_at": pub_raw,
-                "display_date": _format_display_date(pub_raw),
-                "source": "Marketaux",
-                "sentiment": None,
-            })
-        return results
-
-    except Exception:
-        return []
-
-
-# ── Finnhub market news ────────────────────────────────────────────────────────
-def fetch_finnhub_market_news() -> list[dict]:
-    """Fetch this week's general market news from Finnhub."""
-    api_key = st.secrets.get("FINNHUB_API_KEY", "")
-    if not api_key:
-        return []
-
-    url = "https://finnhub.io/api/v1/news"
-    params = {"token": api_key, "category": "general"}
-    cutoff_ts = _week_ago().timestamp()
-
-    try:
-        resp = requests.get(url, params=params, timeout=8)
-        if resp.status_code != 200:
-            return []
-        articles = resp.json()
-        if not isinstance(articles, list):
-            return []
-
-        results = []
-        for a in articles:
-            ts = a.get("datetime", 0)
-            if ts < cutoff_ts:
-                continue
-            pub_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-            results.append({
-                "title": a.get("headline", ""),
-                "summary": a.get("summary", ""),
-                "url": a.get("url", ""),
-                "published_at": pub_str,
-                "display_date": _format_display_date(pub_str),
-                "source": "Finnhub",
-                "sentiment": None,
-            })
-
-        results.sort(key=lambda x: x.get("published_at", ""), reverse=True)
-        return results[:10]
-
-    except Exception:
-        return []
+    # Deduplicate + sort newest first
+    seen = set()
+    unique = []
+    for a in results:
+        key = a.get("title", "")[:50].lower().strip()
+        if key and key not in seen:
+            seen.add(key)
+            unique.append(a)
+    unique.sort(key=lambda x: x.get("published_at", ""), reverse=True)
+    return unique
 
 
 # ── Combined fetcher ───────────────────────────────────────────────────────────
